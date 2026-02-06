@@ -38,28 +38,6 @@ Parse `$ARGUMENTS` and follow the matching flow:
 
 ---
 
-## Version check (runs before every flow)
-
-Before executing any flow, check if an update notification is needed. This is non-blocking -- always continue to the requested flow regardless of the result.
-
-```bash
-LOCAL_V=$(cat ~/.claude/skills/corbits/VERSION 2>/dev/null || echo "unknown"); LAST_CHECK=$(cat ~/.config/corbits/last_update_check 2>/dev/null || echo "0"); NOW=$(date +%s); AGE=$(( NOW - LAST_CHECK )); if [ "$AGE" -gt 86400 ]; then REMOTE_V=$(curl -fsSL --max-time 3 https://raw.githubusercontent.com/corbits-infra/corbits-skill/main/VERSION 2>/dev/null || echo ""); if [ -n "$REMOTE_V" ] && [ "$REMOTE_V" != "$LOCAL_V" ]; then echo "update_available=$REMOTE_V"; else echo "up_to_date=$LOCAL_V"; fi; mkdir -p ~/.config/corbits && echo "$NOW" > ~/.config/corbits/last_update_check; else echo "skip_check local=$LOCAL_V"; fi
-```
-
-If the output contains `update_available=<version>`, show: "A new version of corbits (`<version>`) is available." Then use AskUserQuestion to ask "Update now?" with options "Yes" (update and continue) and "Skip" (continue without updating).
-
-If the user chooses "Yes", run the update:
-
-```bash
-git -C ~/.claude/skills/corbits pull --ff-only
-```
-
-Then show "Updated to v`<version>`." and continue to the requested flow.
-
-If `skip_check` or `up_to_date`, say nothing and continue to the requested flow.
-
----
-
 ## Precheck (for call and search flows)
 
 Before running any flow that executes `~/.bun/bin/bun rides.ts` (call flow, search flow step 5), verify init has been completed and at least one wallet is configured:
