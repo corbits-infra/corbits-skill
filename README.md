@@ -9,29 +9,25 @@
           https://api.corbits.dev
 ```
 
-# Corbits Skill for Claude Code
+# Corbits Plugin for Claude Code
 
 Discover and call paid API proxies on the [Corbits](https://api.corbits.dev) platform directly from Claude Code.
 
 ## Install
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/corbits-infra/corbits-skill/main/install.sh | bash
+Add the marketplace to Claude Code:
+
+```
+/plugin marketplace add corbits-infra/corbits-skill
 ```
 
-Or clone manually:
+Then install the plugin:
 
-```bash
-git clone https://github.com/corbits-infra/corbits-skill ~/.claude/skills/corbits
+```
+/plugin install corbits
 ```
 
-Then in Claude Code, run `/corbits init` to set up your wallet keys.
-
-## Update
-
-The skill checks for updates automatically once per day. When a new version is available, it will offer to update in place.
-
-To update manually, re-run the install command.
+Then run `/corbits init` to set up your wallet keys.
 
 ## Usage
 
@@ -47,8 +43,8 @@ To update manually, re-run the install command.
 
 ## Uninstall
 
-```bash
-rm -rf ~/.claude/skills/corbits ~/.config/corbits
+```
+/plugin uninstall corbits
 ```
 
 To also remove wallet keys from Keychain:

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "corbits",
+  "version": "0.1.0",
+  "description": "Corbits plugin marketplace for Claude Code",
+  "owner": {
+    "name": "Corbits",
+    "email": "support@corbits.dev"
+  },
+  "metadata": {
+    "description": "Discover and call paid API proxies on the Corbits platform",
+    "homepage": "https://api.corbits.dev",
+    "documentation": "https://github.com/corbits-infra/corbits-skill#readme"
+  },
+  "plugins": [
+    {
+      "name": "corbits",
+      "description": "Discover and call paid API proxies on the Corbits platform",
+      "source": "./plugins/corbits",
+      "version": "0.1.0",
+      "author": {
+        "name": "Corbits"
+      },
+      "category": "api"
+    }
+  ]
+}
