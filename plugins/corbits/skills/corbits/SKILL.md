@@ -52,7 +52,7 @@ test -f ~/.config/corbits/project/rides.ts && echo "rides=ok" || echo "rides=mis
 test -f ~/.config/corbits/project/rides.ts && echo "rides=ok" || echo "rides=missing"; ([ -n "$CORBITS_SOLANA_KEYPAIR" ] || test -s ~/.config/corbits/credentials/solana-keypair) && echo "sol=ok" || echo "sol=missing"; ([ -n "$CORBITS_EVM_KEY" ] || test -s ~/.config/corbits/credentials/evm-key) && echo "evm=ok" || echo "evm=missing"
 ```
 
-Detect the platform with `uname -s` (`Darwin` = macOS, `Linux` = Linux) and run the appropriate command.
+Detect the platform with `uname -s` (`Darwin` = macOS, `Linux` = Linux) and run the appropriate command. On OpenClaw, keys are injected as env vars from `openclaw.json` so the env check covers that case.
 
 If `rides=missing`, tell the user: "Corbits is not set up yet. Run `/corbits init` first." STOP.
 
@@ -192,7 +192,11 @@ If `$ARGUMENTS` is `init`, run these steps in order:
 
 ### Step 1. Collect wallet keys and store credentials
 
-Detect the platform with `uname -s` and run the appropriate command. Leaving a key empty or pressing Enter skips it.
+Detect the platform and environment: check `uname -s` (`Darwin` = macOS, `Linux` = Linux) and whether `~/.openclaw` exists (OpenClaw). Use the first matching branch:
+
+1. **macOS** — `uname -s` is `Darwin`
+2. **OpenClaw** — `uname -s` is `Linux` and `~/.openclaw` exists
+3. **Linux (Claude Code / OpenCode)** — `uname -s` is `Linux` (fallback)
 
 **macOS:**
 
@@ -202,7 +206,7 @@ IMPORTANT: Do NOT use multi-statement AppleScript (`-e 'if ...'`). Use a single 
 SOL_KEY=$(osascript -e 'display dialog "Solana keypair:" with title "Corbits Setup" buttons {"Skip", "OK"} default button "OK" default answer "" with hidden answer' -e 'text returned of result' 2>/dev/null || echo "") && EVM_KEY=$(osascript -e 'display dialog "EVM private key:" with title "Corbits Setup" buttons {"Skip", "OK"} default button "OK" default answer "" with hidden answer' -e 'text returned of result' 2>/dev/null || echo ""); [ -n "$SOL_KEY" ] && security add-generic-password -a corbits -s corbits-solana-keypair -w "$SOL_KEY" -U; [ -n "$EVM_KEY" ] && security add-generic-password -a corbits -s corbits-evm-key -w "$EVM_KEY" -U; echo "sol=$([ -n "$SOL_KEY" ] && echo configured || echo skipped) evm=$([ -n "$EVM_KEY" ] && echo configured || echo skipped)"
 ```
 
-**Linux:**
+**Linux (Claude Code / OpenCode):**
 
 Collect both keys from the user using AskUserQuestion (or equivalent prompt tool). Each key is optional — if the user skips or leaves it empty, that key is not configured. Then write the non-empty keys:
 
@@ -223,7 +227,36 @@ Then check what was configured:
 echo "sol=$(test -f ~/.config/corbits/credentials/solana-keypair && echo configured || echo skipped) evm=$(test -f ~/.config/corbits/credentials/evm-key && echo configured || echo skipped)"
 ```
 
-On macOS, keys are stored in Keychain. On Linux, keys are stored in `~/.config/corbits/credentials/` with restricted permissions (700 directory, 600 files). The `rides.ts` script reads from the appropriate backend at call time.
+**OpenClaw:**
+
+Ask the user: "Would you like to configure your wallet keys yourself, or should I update openclaw.json for you?"
+
+If the user wants to do it themselves, show them what to add to `~/.openclaw/openclaw.json` under `skills.entries.corbits.env`:
+
+```json
+{
+  "skills": {
+    "entries": {
+      "corbits": {
+        "env": {
+          "CORBITS_SOLANA_KEYPAIR": "[123,45,67,...]",
+          "CORBITS_EVM_KEY": "0xabc..."
+        }
+      }
+    }
+  }
+}
+```
+
+If the agent should do it, collect the keys from the user, then read `~/.openclaw/openclaw.json`, merge in `skills.entries.corbits.env` with `CORBITS_SOLANA_KEYPAIR` and `CORBITS_EVM_KEY`, and write it back. Be careful to preserve the existing config.
+
+After either path, verify the keys were actually persisted:
+
+```bash
+python3 -c "import json; d=json.load(open('$HOME/.openclaw/openclaw.json')); e=d.get('skills',{}).get('entries',{}).get('corbits',{}).get('env',{}); print(f\"sol={'configured' if e.get('CORBITS_SOLANA_KEYPAIR') else 'skipped'} evm={'configured' if e.get('CORBITS_EVM_KEY') else 'skipped'}\")"
+```
+
+On macOS, keys are stored in Keychain. On Linux with Claude Code/OpenCode, keys are stored in `~/.config/corbits/credentials/` with restricted permissions. On OpenClaw, keys are injected as env vars from `openclaw.json`. The `rides.ts` script checks env vars first, then falls back to the platform-specific backend.
 
 ### Step 2. Check that at least one key was configured
 
