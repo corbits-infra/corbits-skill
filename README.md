@@ -9,13 +9,15 @@
           https://api.corbits.dev
 ```
 
-# Corbits Plugin for Claude Code
+# Corbits Skill
 
-Discover and call paid API proxies on the [Corbits](https://api.corbits.dev) platform directly from Claude Code.
+Discover and call paid API proxies on the [Corbits](https://api.corbits.dev) platform directly from Claude Code or OpenCode.
 
 ## Install
 
-Add the marketplace to Claude Code:
+### Claude Code
+
+Add the marketplace:
 
 ```
 /plugin marketplace add corbits-infra/corbits-skill
@@ -27,7 +29,17 @@ Then install the plugin:
 /plugin install corbits
 ```
 
-Then run `/corbits init` to set up your wallet keys.
+### OpenCode
+
+```bash
+mkdir -p ~/.config/opencode/skills/corbits
+curl -o ~/.config/opencode/skills/corbits/SKILL.md \
+  https://raw.githubusercontent.com/corbits-infra/corbits-skill/main/plugins/corbits/skills/corbits/SKILL.md
+```
+
+### Setup
+
+Run `/corbits init` to set up your wallet keys.
 
 ## Usage
 
