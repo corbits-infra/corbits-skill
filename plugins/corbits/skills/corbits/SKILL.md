@@ -40,11 +40,19 @@ Parse `$ARGUMENTS` and follow the matching flow:
 
 ## Precheck (for call and search flows)
 
-Before running any flow that executes `~/.bun/bin/bun rides.ts` (call flow, search flow step 5), verify init has been completed and at least one wallet is configured:
+Before running any flow that executes `~/.bun/bin/bun rides.ts` (call flow, search flow step 5), verify init has been completed and at least one wallet is configured.
 
+**macOS:**
 ```bash
 test -f ~/.config/corbits/project/rides.ts && echo "rides=ok" || echo "rides=missing"; security find-generic-password -a corbits -s corbits-solana-keypair -w >/dev/null 2>&1 && echo "sol=ok" || echo "sol=missing"; security find-generic-password -a corbits -s corbits-evm-key -w >/dev/null 2>&1 && echo "evm=ok" || echo "evm=missing"
 ```
+
+**Linux:**
+```bash
+test -f ~/.config/corbits/project/rides.ts && echo "rides=ok" || echo "rides=missing"; ([ -n "$CORBITS_SOLANA_KEYPAIR" ] || test -s ~/.config/corbits/credentials/solana-keypair) && echo "sol=ok" || echo "sol=missing"; ([ -n "$CORBITS_EVM_KEY" ] || test -s ~/.config/corbits/credentials/evm-key) && echo "evm=ok" || echo "evm=missing"
+```
+
+Detect the platform with `uname -s` (`Darwin` = macOS, `Linux` = Linux) and run the appropriate command.
 
 If `rides=missing`, tell the user: "Corbits is not set up yet. Run `/corbits init` first." STOP.
 
@@ -182,9 +190,11 @@ In either case, present the available endpoints in a markdown table with columns
 
 If `$ARGUMENTS` is `init`, run these steps in order:
 
-### Step 1. Collect wallet keys and store in Keychain
+### Step 1. Collect wallet keys and store credentials
 
-Run all key collection in a single bash command so variables persist. Clicking "Skip" or leaving empty skips that key.
+Detect the platform with `uname -s` and run the appropriate command. Leaving a key empty or pressing Enter skips it.
+
+**macOS:**
 
 IMPORTANT: Do NOT use multi-statement AppleScript (`-e 'if ...'`). Use a single `-e` with just `text returned of result`. The "Skip" button is handled by checking if the result is empty afterward. Clicking Skip triggers an AppleScript error caught by `2>/dev/null || echo ""`.
 
@@ -192,7 +202,28 @@ IMPORTANT: Do NOT use multi-statement AppleScript (`-e 'if ...'`). Use a single 
 SOL_KEY=$(osascript -e 'display dialog "Solana keypair:" with title "Corbits Setup" buttons {"Skip", "OK"} default button "OK" default answer "" with hidden answer' -e 'text returned of result' 2>/dev/null || echo "") && EVM_KEY=$(osascript -e 'display dialog "EVM private key:" with title "Corbits Setup" buttons {"Skip", "OK"} default button "OK" default answer "" with hidden answer' -e 'text returned of result' 2>/dev/null || echo ""); [ -n "$SOL_KEY" ] && security add-generic-password -a corbits -s corbits-solana-keypair -w "$SOL_KEY" -U; [ -n "$EVM_KEY" ] && security add-generic-password -a corbits -s corbits-evm-key -w "$EVM_KEY" -U; echo "sol=$([ -n "$SOL_KEY" ] && echo configured || echo skipped) evm=$([ -n "$EVM_KEY" ] && echo configured || echo skipped)"
 ```
 
-The raw key value (JSON byte array, file path, or hex key) is stored directly in Keychain. No files are written to disk during init. The `rides.ts` script writes a temp file only when needed at call time, then deletes it immediately after.
+**Linux:**
+
+Collect both keys from the user using AskUserQuestion (or equivalent prompt tool). Each key is optional — if the user skips or leaves it empty, that key is not configured. Then write the non-empty keys:
+
+```bash
+mkdir -p ~/.config/corbits/credentials && chmod 700 ~/.config/corbits/credentials
+```
+
+For each key the user provided, write it:
+```bash
+printf '%s' '<solana_keypair_value>' > ~/.config/corbits/credentials/solana-keypair && chmod 600 ~/.config/corbits/credentials/solana-keypair
+```
+```bash
+printf '%s' '<evm_key_value>' > ~/.config/corbits/credentials/evm-key && chmod 600 ~/.config/corbits/credentials/evm-key
+```
+
+Then check what was configured:
+```bash
+echo "sol=$(test -f ~/.config/corbits/credentials/solana-keypair && echo configured || echo skipped) evm=$(test -f ~/.config/corbits/credentials/evm-key && echo configured || echo skipped)"
+```
+
+On macOS, keys are stored in Keychain. On Linux, keys are stored in `~/.config/corbits/credentials/` with restricted permissions (700 directory, 600 files). The `rides.ts` script reads from the appropriate backend at call time.
 
 ### Step 2. Check that at least one key was configured
 
@@ -217,14 +248,30 @@ mkdir -p ~/.config/corbits/project && ~/.bun/bin/bun init -y --cwd ~/.config/cor
 ```typescript
 import { payer } from "@faremeter/rides";
 import { execSync } from "child_process";
-import { writeFileSync, unlinkSync, mkdtempSync } from "fs";
+import { readFileSync, writeFileSync, unlinkSync, mkdtempSync } from "fs";
 import { join } from "path";
-import { tmpdir } from "os";
+import { tmpdir, platform, homedir } from "os";
 
-function getKeychainValue(service: string): string | null {
+const ENV_NAMES: Record<string, string> = {
+  "solana-keypair": "CORBITS_SOLANA_KEYPAIR",
+  "evm-key": "CORBITS_EVM_KEY",
+};
+
+function getCredential(service: string): string | null {
+  const envName = ENV_NAMES[service];
+  if (envName) {
+    const envVal = process.env[envName];
+    if (envVal) return envVal.trim();
+  }
   try {
-    return execSync(
-      `security find-generic-password -a corbits -s ${service} -w`,
+    if (platform() === "darwin") {
+      return execSync(
+        `security find-generic-password -a corbits -s corbits-${service} -w`,
+        { encoding: "utf-8" }
+      ).trim();
+    }
+    return readFileSync(
+      join(homedir(), ".config", "corbits", "credentials", service),
       { encoding: "utf-8" }
     ).trim();
   } catch {
@@ -244,7 +291,7 @@ process.on("exit", cleanup);
 process.on("SIGINT", () => { cleanup(); process.exit(1); });
 process.on("SIGTERM", () => { cleanup(); process.exit(1); });
 
-const solKeypair = getKeychainValue("corbits-solana-keypair");
+const solKeypair = getCredential("solana-keypair");
 if (solKeypair) {
   if (solKeypair.startsWith("[")) {
     const dir = mkdtempSync(join(tmpdir(), "corbits-"));
@@ -257,7 +304,7 @@ if (solKeypair) {
   }
 }
 
-const evmPrivateKey = getKeychainValue("corbits-evm-key");
+const evmPrivateKey = getCredential("evm-key");
 if (evmPrivateKey) await payer.addLocalWallet(evmPrivateKey);
 
 const method = process.argv[2]?.toUpperCase();
