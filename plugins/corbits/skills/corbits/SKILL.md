@@ -2,7 +2,7 @@
 name: corbits
 description: Discover Corbits API proxies, fetch OpenAPI specs, and make API calls
 argument-hint: init | search | call | status | list
-allowed-tools: WebFetch, Bash, AskUserQuestion, Read
+allowed-tools: WebFetch, Bash, AskUserQuestion, Read, webfetch, bash, question, read
 ---
 
 # Corbits API Discovery
