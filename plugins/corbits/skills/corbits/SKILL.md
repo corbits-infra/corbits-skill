@@ -90,6 +90,23 @@ When fetching an OpenAPI spec, extract the base path from the `servers` field. F
 
 ---
 
+## Fetch spec procedure
+
+This procedure is referenced by multiple flows. Given a proxy `<id>`:
+
+1. Fetch the OpenAPI spec:
+   ```
+   WebFetch https://api.corbits.dev/api/v1/proxies/<id>/openapi
+   ```
+2. If the spec is available, extract the base path from `servers[0].url` (see "Base path extraction" above).
+3. If the OpenAPI spec is not available (404), fetch the endpoint list instead:
+   ```
+   WebFetch https://api.corbits.dev/api/v1/proxies/<id>/endpoints
+   ```
+   This returns `path_pattern`, `description`, `price_usdc`, and `scheme` for each endpoint. The base path is empty when using the endpoint list (paths like `/v1/models` are already fully qualified in `path_pattern`).
+
+---
+
 ## Call flow
 
 ### Step 1. Precheck and read context
@@ -106,19 +123,7 @@ Print the current proxy name and URL (e.g. "Calling on **open-ai** (`https://...
 
 ### Step 2. Fetch OpenAPI spec or endpoint list
 
-```
-WebFetch https://api.corbits.dev/api/v1/proxies/<id>/openapi
-```
-
-If the spec is available, extract the base path from `servers[0].url` (see "Base path extraction" above).
-
-If the OpenAPI spec is not available (404), fetch the endpoint list instead:
-
-```
-WebFetch https://api.corbits.dev/api/v1/proxies/<id>/endpoints
-```
-
-This returns `path_pattern`, `description`, `price_usdc`, and `scheme` for each endpoint. Use these as the available endpoints for the remaining steps. The base path is empty when using the endpoint list (paths like `/v1/models` are already fully qualified in `path_pattern`).
+Run the "Fetch spec procedure" above with the proxy `<id>` from context. Use the results as the available endpoints for the remaining steps.
 
 ### Step 3. Pick an endpoint
 
@@ -168,21 +173,9 @@ If no context, tell the user to search for a proxy first (e.g. `/corbits search 
 
 ### Step 2. Fetch OpenAPI spec or endpoint list
 
-```
-WebFetch https://api.corbits.dev/api/v1/proxies/<id>/openapi
-```
+Run the "Fetch spec procedure" above with the proxy `<id>` from context. If the OpenAPI spec was used, check for `x-corbits-price` or `x-402` extension fields on each endpoint for pricing. If using the endpoint list, use the `price_usdc` field directly.
 
-If the spec is available, extract the base path from `servers[0].url` (see "Base path extraction" above). Check for `x-corbits-price` or `x-402` extension fields on each endpoint for pricing.
-
-If the OpenAPI spec is not available (404), fetch the endpoint list instead:
-
-```
-WebFetch https://api.corbits.dev/api/v1/proxies/<id>/endpoints
-```
-
-This returns `path_pattern`, `description`, `price_usdc`, and `scheme` for each endpoint.
-
-In either case, present the available endpoints in a markdown table with columns: Path, Description, Methods, Price. Suggest a simple GET endpoint with no required parameters to try.
+Present the available endpoints in a markdown table with columns: Path, Description, Methods, Price. Suggest a simple GET endpoint with no required parameters to try.
 
 ---
 
@@ -202,8 +195,25 @@ Detect the platform and environment: check `uname -s` (`Darwin` = macOS, `Linux`
 
 IMPORTANT: Do NOT use multi-statement AppleScript (`-e 'if ...'`). Use a single `-e` with just `text returned of result`. The "Skip" button is handled by checking if the result is empty afterward. Clicking Skip triggers an AppleScript error caught by `2>/dev/null || echo ""`.
 
+Collect the Solana keypair:
 ```bash
-SOL_KEY=$(osascript -e 'display dialog "Solana keypair:" with title "Corbits Setup" buttons {"Skip", "OK"} default button "OK" default answer "" with hidden answer' -e 'text returned of result' 2>/dev/null || echo "") && EVM_KEY=$(osascript -e 'display dialog "EVM private key:" with title "Corbits Setup" buttons {"Skip", "OK"} default button "OK" default answer "" with hidden answer' -e 'text returned of result' 2>/dev/null || echo ""); [ -n "$SOL_KEY" ] && security add-generic-password -a corbits -s corbits-solana-keypair -w "$SOL_KEY" -U; [ -n "$EVM_KEY" ] && security add-generic-password -a corbits -s corbits-evm-key -w "$EVM_KEY" -U; echo "sol=$([ -n "$SOL_KEY" ] && echo configured || echo skipped) evm=$([ -n "$EVM_KEY" ] && echo configured || echo skipped)"
+SOL_KEY=$(osascript -e 'display dialog "Solana keypair:" with title "Corbits Setup" buttons {"Skip", "OK"} default button "OK" default answer "" with hidden answer' -e 'text returned of result' 2>/dev/null || echo "")
+```
+
+Collect the EVM private key:
+```bash
+EVM_KEY=$(osascript -e 'display dialog "EVM private key:" with title "Corbits Setup" buttons {"Skip", "OK"} default button "OK" default answer "" with hidden answer' -e 'text returned of result' 2>/dev/null || echo "")
+```
+
+Store non-empty keys in Keychain:
+```bash
+[ -n "$SOL_KEY" ] && security add-generic-password -a corbits -s corbits-solana-keypair -w "$SOL_KEY" -U
+[ -n "$EVM_KEY" ] && security add-generic-password -a corbits -s corbits-evm-key -w "$EVM_KEY" -U
+```
+
+Report what was configured:
+```bash
+echo "sol=$([ -n "$SOL_KEY" ] && echo configured || echo skipped) evm=$([ -n "$EVM_KEY" ] && echo configured || echo skipped)"
 ```
 
 **Linux (Claude Code / OpenCode):**
@@ -390,19 +400,16 @@ Show the user the matching proxies with their name, url, tags, and pricing. For 
 
 ### Step 3. Save context
 
-After a proxy is selected, write the context file:
+After a proxy is selected, ensure the config directory exists and write the context file using `jq` for safe JSON encoding:
 
 ```bash
-echo '{"id":<id>,"name":"<name>","org_slug":<org_slug_or_null>,"url":"<url>"}' > ~/.config/corbits/context.json
+mkdir -p ~/.config/corbits
+jq -n --argjson id <id> --arg name "<name>" --argjson org_slug <org_slug_or_null> --arg url "<url>" '{id: $id, name: $name, org_slug: $org_slug, url: $url}' > ~/.config/corbits/context.json
 ```
 
 ### Step 4. Fetch the OpenAPI spec
 
-```
-WebFetch https://api.corbits.dev/api/v1/proxies/<proxy-id>/openapi
-```
-
-Extract the base path from `servers[0].url` (see "Base path extraction" above). Present the available endpoints with their full paths (`<base_path><spec_path>`), methods, and descriptions in a markdown table with columns: Path, Description, Methods. The spec contains the complete request/response schemas, query parameters, request body definitions, and auth requirements needed to construct API calls.
+Run the "Fetch spec procedure" above with the selected proxy `<id>`. Present the available endpoints with their full paths (`<base_path><spec_path>`), methods, and descriptions in a markdown table with columns: Path, Description, Methods. The spec contains the complete request/response schemas, query parameters, request body definitions, and auth requirements needed to construct API calls.
 
 After the table, suggest a simple GET endpoint with no required parameters (e.g. `GET /v1/models`) so the user can quickly test the proxy without constructing a request body.
 
@@ -432,6 +439,8 @@ For POST/PUT/PATCH/DELETE (with body):
 
 ## Discovery API reference
 
+All discovery API endpoints are **public** — no authentication is required. There are no documented rate limits, but avoid making excessive requests in tight loops.
+
 ### `GET /api/v1/search?q=<query>` - Search proxies and endpoints
 
 No pagination. Returns up to 20 proxies and 50 endpoints. Empty or whitespace-only query returns empty arrays.
@@ -459,6 +468,6 @@ Cursor-based pagination. Query params: `cursor` (last item ID), `limit` (default
 - The `url` field is computed: `https://{name}.api.corbits.dev` or `https://{name}.{org_slug}.api.corbits.dev` when org_slug is present
 - `backend_url` is internal and never returned in API responses
 - All responses only include active proxies (`is_active=true`, `status='active'`)
-- Prices are stored as micro-USDC integers. To display in USDC, multiply by `10e-6` (e.g. `10000` = `$0.01 USDC`)
+- Prices are stored as micro-USDC integers. To display in USDC, multiply by `1e-6` (e.g. `10000` = `$0.01 USDC`)
 - Always use the proxy's `url` field as the base URL for API calls, not the discovery API URL
 - The `x-402` extension in specs indicates endpoints with payment requirements - `rides.ts` handles these automatically via `@faremeter/rides`
