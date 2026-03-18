@@ -77,4 +77,8 @@ if (body) {
 
 const res = await payer.fetch(url, options);
 console.log(res.status, await res.text());
-if (res.status >= 400 && res.status !== 402) process.exit(1);
+if (res.status === 402) {
+  console.error("Payment failed: wallet may have insufficient USDC balance or may be funded on the wrong network (e.g. testnet vs mainnet).");
+  process.exit(2);
+}
+if (res.status >= 400) process.exit(1);
