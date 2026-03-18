@@ -292,7 +292,7 @@ mkdir -p ~/.config/corbits/project && ~/.bun/bin/bun init -y --cwd ~/.config/cor
 
 ### Step 5. Write `~/.config/corbits/project/rides.ts`
 
-Read the `rides.ts` file from the skill's directory (located alongside this SKILL.md) and write its contents to `~/.config/corbits/project/rides.ts`.
+Use the Read tool to read `rides.ts` from this skill's directory (the same directory as this SKILL.md file) and write its contents to `~/.config/corbits/project/rides.ts`. If the skill directory is not known, use the Glob tool to find `**/skills/corbits/rides.ts`.
 
 ### Step 6. Confirm
 
@@ -326,9 +326,16 @@ Show the user the matching proxies with their name, url, tags, and pricing. For 
 
 After a proxy is selected, ensure the config directory exists and write the context file using `jq` for safe JSON encoding:
 
+If `org_slug` is null:
 ```bash
 mkdir -p ~/.config/corbits
-jq -n --argjson id <id> --arg name "<name>" --argjson org_slug <org_slug_or_null> --arg url "<url>" '{id: $id, name: $name, org_slug: $org_slug, url: $url}' > ~/.config/corbits/context.json
+jq -n --argjson id <id> --arg name "<name>" --arg url "<url>" '{id: $id, name: $name, org_slug: null, url: $url}' > ~/.config/corbits/context.json
+```
+
+If `org_slug` is a string:
+```bash
+mkdir -p ~/.config/corbits
+jq -n --argjson id <id> --arg name "<name>" --arg org_slug "<org_slug>" --arg url "<url>" '{id: $id, name: $name, org_slug: $org_slug, url: $url}' > ~/.config/corbits/context.json
 ```
 
 ### Step 4. Fetch the OpenAPI spec
